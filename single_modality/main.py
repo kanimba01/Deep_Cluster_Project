@@ -11,7 +11,7 @@ import json
 from dataloader import get_loader
 import matplotlib.pyplot as plt
 from torch.optim import Adam
-from utils import plot_cluster_map, feature_preprocessing, compute_nmi, set_seed
+from utils import plot_cluster_map, apply_pca, compute_nmi, set_seed
 
 import torch.nn as nn
 import torchvision.models as models
@@ -81,7 +81,7 @@ def train(epochs=50, n_clusters=1000):
 
         true_labels = np.array(true_labels_list)
         features = np.concatenate(features_list, axis=0)
-        features_reduced = feature_preprocessing(features)
+        features_reduced = apply_pca(features)
 
         # Cluster features using KMeans
         kmeans = KMeans(n_clusters=n_clusters, random_state=0)
