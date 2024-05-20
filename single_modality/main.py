@@ -34,7 +34,7 @@ class DeepClusterModel(nn.Module):
     def forward(self, x):
         x = x.to(next(self.parameters()).device)
         features = self.feature_extractor(x)['features']
-        features = features.view(features.size(0), -1)  # Flatten the features
+        features = features.view(features.size(0), -1)
         logits = self.classifier(features)
         return logits, features
 
@@ -69,11 +69,9 @@ def train(epochs=50, n_clusters=1000):
         # Extract features and true labels
         for images, true_labels, pseudolabels, idx in tqdm(loader, desc="Processing Batches"):
             images = images.to(device)
-            # print(f'Images device: {images.device}, True labels device: {true_labels.device}, Pseudo labels device: {pseudolabels.device}')  # Debug print
 
             optimizer.zero_grad()
             logits, features = model(images)
-            # print(f'Logits device: {logits.device}, Features device: {features.device}')  # Debug print
 
             features_list.append(features.detach().cpu().numpy())
             true_labels_list.extend(true_labels.cpu().numpy())

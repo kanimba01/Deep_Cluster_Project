@@ -15,7 +15,6 @@ import random
 
 
 def set_seed(seed_value=42):
-    """ Set seed for reproducibility. """
     random.seed(seed_value)  # Python random module
     np.random.seed(seed_value)  # Numpy module
     torch.manual_seed(seed_value)  # Sets the seed for generating random numbers for all devices (both CPU and CUDA)
