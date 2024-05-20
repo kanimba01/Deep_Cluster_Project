@@ -4,9 +4,6 @@ This project implements deep clustering models using PyTorch. It includes two ty
 1. **Single Modality Deep Clustering**: Processes a single modality visual type.
 2. **Cross Modality Deep Clustering**: Processes visual and audio types of input data simultaneously.
 
-## Project Structure
-
-The project directory has the following structure:
 
 ### Requirements
 
