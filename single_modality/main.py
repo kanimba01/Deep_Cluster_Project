@@ -11,7 +11,7 @@ import json
 from dataloader import get_loader
 import matplotlib.pyplot as plt
 from torch.optim import Adam
-from utils import plot_cluster_map, apply_pca, compute_nmi, set_seed
+from utils import plot_cluster_map, feature_preprocessing, compute_nmi, set_seed
 
 import torch.nn as nn
 import torchvision.models as models
@@ -38,29 +38,28 @@ class DeepClusterModel(nn.Module):
         logits = self.classifier(features)
         return logits, features
 
-    def reset_classifier(self, n_clusters):
+    def reset_classifier_layer(self, n_clusters):
         self.classifier = nn.Linear(self.classifier.in_features, n_clusters).to(next(self.parameters()).device)
         nn.init.kaiming_normal_(self.classifier.weight)
 
 
-def train(epochs=50, n_clusters=1000):
+def train(epochs=50, n_clusters=10):
     set_seed(42)
     device = torch.device("mps" if torch.backends.mps.is_built() and torch.backends.mps.is_available() else "cpu")
     print(f'Using device: {device}')
-    loader = get_loader(batch_size=64)  
+    loader = get_loader(image_dir='../image_files',batch_size=64)
     model = DeepClusterModel().to(device)
     print(f'Model device: {next(model.parameters()).device}')
 
     optimizer = Adam(model.parameters(), lr=0.0005)
     scheduler = OneCycleLR(optimizer, max_lr=0.001, total_steps=epochs * len(loader))
-    writer = SummaryWriter(log_dir=f'runs/DeepCluster_1000k_one_modality')
+    writer = SummaryWriter(log_dir=f'runs/DeepCluster_10k_one_modality')
 
     results = []
 
     for epoch in tqdm(range(epochs), desc="Training Epochs"):
         model.train()
-        model.reset_classifier(n_clusters)  # Reset classifier for new clusters
-        optimizer = Adam(model.parameters(), lr=0.0005)  # Reinitialize optimizer
+        model.reset_classifier_layer(n_clusters)  # Reset classifier for new clusters
         features_list = []
         true_labels_list = []
         pseudolabels_list = []
@@ -69,9 +68,11 @@ def train(epochs=50, n_clusters=1000):
         # Extract features and true labels
         for images, true_labels, pseudolabels, idx in tqdm(loader, desc="Processing Batches"):
             images = images.to(device)
+            # print(f'Images device: {images.device}, True labels device: {true_labels.device}, Pseudo labels device: {pseudolabels.device}')  # Debug print
 
             optimizer.zero_grad()
             logits, features = model(images)
+            # print(f'Logits device: {logits.device}, Features device: {features.device}')  # Debug print
 
             features_list.append(features.detach().cpu().numpy())
             true_labels_list.extend(true_labels.cpu().numpy())
@@ -79,7 +80,7 @@ def train(epochs=50, n_clusters=1000):
 
         true_labels = np.array(true_labels_list)
         features = np.concatenate(features_list, axis=0)
-        features_reduced = apply_pca(features)
+        features_reduced = feature_preprocessing(features)
 
         # Cluster features using KMeans
         kmeans = KMeans(n_clusters=n_clusters, random_state=0)
@@ -121,7 +122,7 @@ def train(epochs=50, n_clusters=1000):
         results.append(epoch_result)
         writer.flush()
 
-    results_path = 'results/training_results_1000k.json'
+    results_path = 'results/training_results_k_10.json'
     os.makedirs(os.path.dirname(results_path), exist_ok=True)
     with open(results_path, 'w') as fp:
         json.dump(results, fp, indent=4)

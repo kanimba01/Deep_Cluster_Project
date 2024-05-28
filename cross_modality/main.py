@@ -19,7 +19,6 @@ from sklearn.metrics import normalized_mutual_info_score
 from dataloader import get_loader
 
 
-# Define utility functions
 def set_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -32,7 +31,7 @@ def compute_nmi(true_labels, cluster_labels):
     return normalized_mutual_info_score(true_labels, cluster_labels)
 
 
-def plot_cluster_map(features, labels, epoch, save_path='results/cluster_maps_5'):
+def plot_cluster_map(features, labels, epoch, save_path='results/cluster_maps_10'):
     os.makedirs(save_path, exist_ok=True)
     plt.figure(figsize=(10, 8))
     plt.scatter(features[:, 0], features[:, 1], c=labels, cmap='viridis', s=5)
@@ -45,7 +44,7 @@ def plot_cluster_map(features, labels, epoch, save_path='results/cluster_maps_5'
 
 
 class CrossModalDeepClusterModel(nn.Module):
-    def __init__(self, feature_size=512, n_clusters=100):
+    def __init__(self, feature_size=512, n_clusters=10):
         super(CrossModalDeepClusterModel, self).__init__()
         self.image_feature_extractor, image_feature_size = self.create_resnet18_feature_extractor()
         self.audio_feature_extractor, audio_feature_size = self.create_resnet18_feature_extractor()
@@ -54,34 +53,28 @@ class CrossModalDeepClusterModel(nn.Module):
     
     def create_resnet18_feature_extractor(self):
         resnet18 = models.resnet18(weights=None)
-        return_nodes = {'avgpool': 'features'}  # Use avgpool layer for feature extraction
+        return_nodes = {'avgpool': 'features'}
         feature_extractor = create_feature_extractor(resnet18, return_nodes=return_nodes)
-        feature_size = resnet18.fc.in_features  # Feature size from ResNet18's last linear layer input
+        feature_size = resnet18.fc.in_features
         return feature_extractor, feature_size
 
     def forward_image(self, x):
         features = self.image_feature_extractor(x)['features']
-        features = features.view(features.size(0), -1)  # Flatten the features
+        features = features.view(features.size(0), -1)
         logits = self.image_classifier(features)
         return logits, features
 
     def forward_audio(self, x):
         features = self.audio_feature_extractor(x)['features']
-        features = features.view(features.size(0), -1)  # Flatten the features
+        features = features.view(features.size(0), -1)
         logits = self.audio_classifier(features)
         return logits, features
 
-    def reset_classifier(self, n_clusters):
+    def reset_classifier_layer(self, n_clusters):
         self.image_classifier = nn.Linear(self.image_classifier.in_features, n_clusters).to(next(self.parameters()).device)
         nn.init.kaiming_normal_(self.image_classifier.weight)
         self.audio_classifier = nn.Linear(self.audio_classifier.in_features, n_clusters).to(next(self.parameters()).device)
         nn.init.kaiming_normal_(self.audio_classifier.weight)
-
-
-def get_loader(batch_size=64):
-    # Placeholder function to simulate a DataLoader for images and audio
-    # Replace this with the actual DataLoader code for your dataset
-    pass
 
 
 def feature_preprocessing(features, pca_dim=150, whiten=True):
@@ -94,24 +87,31 @@ def feature_preprocessing(features, pca_dim=150, whiten=True):
     return features_normalized
 
 
-def train_cross_modal(epochs=50, n_clusters=100):
+def train_cross_modal(epochs=10, n_clusters=10):
     set_seed(42)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if not torch.backends.mps.is_available():
+        if not torch.backends.mps.is_built():
+            print("MPS not available because the current PyTorch install was not "
+                  "built with MPS enabled.")
+        else:
+            print("MPS not available because the current MacOS version is not 12.3+ "
+                  "and/or you do not have an MPS-enabled device on this machine.")
+        
+    device = torch.device("mps")
     print(f'Using device: {device}')
-    loader = get_loader(image_dir='./data', spectrogram_folder='./spectrograms', batch_size=64)  # Adjust the paths as necessary
+    loader = get_loader(image_dir='../image_files', audio_dir='../audio_files', batch_size=64)  # Adjust the paths as necessary
     model = CrossModalDeepClusterModel(n_clusters=n_clusters).to(device)
     print(f'Model device: {next(model.parameters()).device}')
 
-    optimizer = Adam(model.parameters(), lr=0.0005)
-    scheduler = OneCycleLR(optimizer, max_lr=0.001, total_steps=epochs * len(loader))
-    writer = SummaryWriter(log_dir=f'runs/CrossModalDeepCluster')
+    optimizer = Adam(model.parameters(), lr=0.001)
+    # scheduler = OneCycleLR(optimizer, max_lr=0.001, total_steps=epochs * len(loader))
+    writer = SummaryWriter(log_dir=f'runs/CrossModalDeepCluster_10')
 
     results = []
 
     for epoch in tqdm(range(epochs), desc="Training Epochs"):
         model.train()
-        model.reset_classifier(n_clusters)  # Reset classifier for new clusters
-        optimizer = Adam(model.parameters(), lr=0.0005)  # Reinitialize optimizer
+        model.reset_classifier_layer(n_clusters)  # Reset classifier for new clusters
         image_features_list = []
         audio_features_list = []
         true_labels_list = []
@@ -136,7 +136,7 @@ def train_cross_modal(epochs=50, n_clusters=100):
         image_features = np.concatenate(image_features_list, axis=0)
         audio_features = np.concatenate(audio_features_list, axis=0)
 
-        # Feature reduction (e.g., PCA)
+        # Feature reduction
         image_features_reduced = feature_preprocessing(image_features)
         audio_features_reduced = feature_preprocessing(audio_features)
 
@@ -146,6 +146,8 @@ def train_cross_modal(epochs=50, n_clusters=100):
         image_pseudolabels = kmeans_image.fit_predict(image_features_reduced)
         audio_pseudolabels = kmeans_audio.fit_predict(audio_features_reduced)
 
+        # Plot cluster maps for the image clusters
+        plot_cluster_map(image_features_reduced, image_pseudolabels, epoch + 1)
         # Cross-modal pseudolabels
         # Use image clusters to generate pseudolabels for audio
         loader.dataset.update_pseudolabels(image_pseudolabels, audio_pseudolabels)
@@ -169,7 +171,7 @@ def train_cross_modal(epochs=50, n_clusters=100):
             loss.backward()
             optimizer.step()
 
-        scheduler.step()
+        # scheduler.step()
 
         # Compute metrics
         nmi = compute_nmi(true_labels, image_pseudolabels)
@@ -190,7 +192,7 @@ def train_cross_modal(epochs=50, n_clusters=100):
         results.append(epoch_result)
         writer.flush()
 
-    results_path = 'results/training_results_cross_modal.json'
+    results_path = 'results/training_results_cross_modal_50.json'
     os.makedirs(os.path.dirname(results_path), exist_ok=True)
     with open(results_path, 'w') as fp:
         json.dump(results, fp, indent=4)
