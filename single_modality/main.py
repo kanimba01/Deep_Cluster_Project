@@ -52,7 +52,7 @@ def train(epochs=50, n_clusters=10):
     print(f'Model device: {next(model.parameters()).device}')
 
     optimizer = Adam(model.parameters(), lr=0.0005)
-    scheduler = OneCycleLR(optimizer, max_lr=0.001, total_steps=epochs * len(loader))
+    # scheduler = OneCycleLR(optimizer, max_lr=0.001, total_steps=epochs * len(loader))
     writer = SummaryWriter(log_dir=f'runs/DeepCluster_10k_one_modality')
 
     results = []
@@ -101,7 +101,7 @@ def train(epochs=50, n_clusters=10):
             loss.backward()
             optimizer.step()
 
-        scheduler.step()
+        # scheduler.step()
 
         # Compute metrics
         nmi = compute_nmi(true_labels, new_pseudolabels)

@@ -89,17 +89,10 @@ def feature_preprocessing(features, pca_dim=150, whiten=True):
 
 def train_cross_modal(epochs=10, n_clusters=10):
     set_seed(42)
-    if not torch.backends.mps.is_available():
-        if not torch.backends.mps.is_built():
-            print("MPS not available because the current PyTorch install was not "
-                  "built with MPS enabled.")
-        else:
-            print("MPS not available because the current MacOS version is not 12.3+ "
-                  "and/or you do not have an MPS-enabled device on this machine.")
         
     device = torch.device("mps")
     print(f'Using device: {device}')
-    loader = get_loader(image_dir='../image_files', audio_dir='../audio_files', batch_size=64)  # Adjust the paths as necessary
+    loader = get_loader(image_dir='../image_files', audio_dir='../audio_files', batch_size=64)
     model = CrossModalDeepClusterModel(n_clusters=n_clusters).to(device)
     print(f'Model device: {next(model.parameters()).device}')
 
@@ -111,7 +104,7 @@ def train_cross_modal(epochs=10, n_clusters=10):
 
     for epoch in tqdm(range(epochs), desc="Training Epochs"):
         model.train()
-        model.reset_classifier_layer(n_clusters)  # Reset classifier for new clusters
+        model.reset_classifier_layer(n_clusters)  # Reset final decision layer for new clusters
         image_features_list = []
         audio_features_list = []
         true_labels_list = []
