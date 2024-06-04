@@ -134,7 +134,7 @@ def train(epochs=10, n_clusters=50):
             optimizer.zero_grad()  # Clear previous gradients
             logits, _ = model(images)
             loss = F.cross_entropy(logits, batch_pseudolabels)
-            loss.backward()  # Compute gradients
+            loss.backward()
             optimizer.step()  # Update model parameters
 
         # Compute metrics
